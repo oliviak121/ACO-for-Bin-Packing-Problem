@@ -1,6 +1,7 @@
 import random
 from numpy.random import choice
 import numpy as np 
+import time
 
 
 def initisalise_pheromones_graph(k, b):
@@ -270,15 +271,32 @@ def run_single_trial(k, b, p, e, max_evaluations, seed, weight_function):
 
     print(f"\nRunning single trial with p={p}, e={e}, seed={seed}")
 
+    #record start time
+    start_time = time.time()
+
     # run the aco algorithm
     best_path, best_fitness, worst_fitness, generations_data = aco_bin_packing(k, b, p, e, max_evaluations, weight_function)
+
+    # calculate average fitness over all generations
+    total_fitness_sum = sum(gen_data['average_fitness'] for gen_data in generations_data)
+    num_generations = len(generations_data)
+    avg_fitness = total_fitness_sum/ num_generations if num_generations > 0 else 0
+
+    #record end time and calculate time elapsed
+    end_time = time.time()
+    elapsed_time = end_time - start_time
 
     # output results
     print(f"Best fitness: {best_fitness}")
     print(f"Worst fitness: {worst_fitness}")
-    print("Generation data:")
-    for gen_data in generations_data:
-        print(f"Total Evaluations: {gen_data['total_evaluations']}, Best = {gen_data['best_fitness']}, Worst = {gen_data['worst_fitness']}, Average = {gen_data['average_fitness']}")
+    print(f"Average fitness over the trial: {avg_fitness:.2f}")
+    
+    #print("Generation data:")
+    #for gen_data in generations_data:
+        #print(f"Total Evaluations: {gen_data['total_evaluations']}, Best = {gen_data['best_fitness']}, Worst = {gen_data['worst_fitness']}, Average = {gen_data['average_fitness']}")
+    
+    # output the total time taken to run the trial
+    print (f"Time taken for this trial: {elapsed_time:.2f} seconds")
 
 def run_multiple_trials(k, b, p, e, max_evaluations, num_trials, weight_function):
     """
@@ -294,11 +312,19 @@ def run_multiple_trials(k, b, p, e, max_evaluations, num_trials, weight_function
     Returns:
         None
     """
+    #record start time
+    start_time = time.time()
+
     for trial in range(num_trials):
         # generate new random seed for each trial
         trial_seed = random.randint(0, 10000)
         print(f"\nStarting Trial {trial +1} with seed {trial_seed}")
         run_single_trial(k, b, p, e, max_evaluations, trial_seed, weight_function)
+    
+    #record end time and calculate time elapsed
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"Time taken for all {num_trials} trials: {elapsed_time:.2f} seconds")
 
 def run_all_aco_types(k_bpp1, b_bpp1, k_bpp2, b_bpp2, max_evaluations, num_trials):
     """
@@ -313,6 +339,9 @@ def run_all_aco_types(k_bpp1, b_bpp1, k_bpp2, b_bpp2, max_evaluations, num_trial
     Returns:
         None
     """
+    # record start time
+    start_time = time.time()
+
     # ACO configurations
     aco_configs = [
         (100, 0.90),  # p = 100, e = 0.90
@@ -333,6 +362,11 @@ def run_all_aco_types(k_bpp1, b_bpp1, k_bpp2, b_bpp2, max_evaluations, num_trial
         print(f"\nRunning ACO with p={p}, e={e}, for BPP2:")
         run_multiple_trials(k_bpp2, b_bpp2, p, e, max_evaluations, num_trials, weight_pbb2)
 
+    #record end time and calculate time taken to run whole program 
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"Total time taken for all ACO configurations and trials: {elapsed_time:.2f} seconds")
+
 
 #TESTING
 ##testing single run
@@ -347,90 +381,10 @@ num_trials = 5  # Run 5 trials
 #run_single_trial(k_bpp1, b_bpp1, p=100, e=0.90, max_evaluations=max_evaluations, seed=random.randint(0, 10000), weight_function=weight_pbb1)
 
 ##testing multiple runs
-run_multiple_trials(k_bpp1, b_bpp1, p=10, e=0.60, max_evaluations=max_evaluations, num_trials=num_trials, weight_function=weight_pbb1)
+#run_multiple_trials(k_bpp1, b_bpp1, p=10, e=0.60, max_evaluations=max_evaluations, num_trials=num_trials, weight_function=weight_pbb1)
 
+##testing running all ACO types in one go
+run_all_aco_types(k_bpp1, b_bpp1, k_bpp2, b_bpp2, max_evaluations, num_trials)
 
-
-
-
-
-"""
-def run_experiments_bpp(k, b, p_values, e_values, max_generations, weight_function):
-    """"""
-    Runs experiments for the Bin Packing Problem with different settings
-    Parameters:
-        k (int): the number of items
-        b (int): the number of bins
-        p_values (list): list of values for the number of ants (paths) per generation
-        e_values (list): List of values for the evaporation rate
-        max_generations (int): The number of generations to run the ACO algorithm
-        weight_function (function): Function to generate item weights
-    Returns:
-        None
-    """"""
-    # Generate weights using the provided weight function (BPP1 or BPP2)
-    weights = weight_function(k)
-
-    # Run experiments for each combination of p (ants) and e (evaporation rate)
-    for p in p_values:
-        for e in e_values:
-            print(f"\nRunning experiment with p={p}, e={e}")
-            
-            # Run the ACO algorithm
-            best_path, best_fitness, worst_fitness, generations_data = aco_bin_packing(k, b, p, e, max_generations)
-            
-            # Output results for this configuration
-            print(f"Best fitness: {best_fitness}")
-            print(f"Worst fitness: {worst_fitness}")
-            print("Generation data:")
-            for gen_data in generations_data:
-                print(f"Generation {gen_data['generation']}: Best = {gen_data['best_fitness']}, Worst = {gen_data['worst_fitness']}, Average = {gen_data['average_fitness']}")
-
-"""
-
-
-"""
-# Parameters for BPP1 and BPP2 experiments
-k_bpp1 = 500  # Number of items for BPP1
-b_bpp1 = 10   # Number of bins for BPP1
-k_bpp2 = 500  # Number of items for BPP2
-b_bpp2 = 50   # Number of bins for BPP2
-
-# Parameter values for ants and evaporation rate (from coursework)
-p_values = [100, 10]  # Number of ants
-e_values = [0.9, 0.6]  # Evaporation rates
-
-max_generations = 100  # Number of generations
-
-# Run experiments for BPP1
-#print("\nRunning experiments for BPP1:")
-#run_experiments_bpp(k_bpp1, b_bpp1, p_values, e_values, max_generations, generate_bpp1_weights)
-
-# Run experiments for BPP2
-print("\nRunning experiments for BPP2:")
-run_experiments_bpp(k_bpp2, b_bpp2, p_values, e_values, max_generations, generate_bpp2_weights)
-"""
-
-
-
-"""
-# Example usage
-k = 500  # Number of items
-b = 10   # Number of bins
-p = 100  # Number of ants per generation
-e = 0.9  # Evaporation rate
-max_generations = 50  # Number of generations
-
-# Run the ACO algorithm
-best_path, best_fitness, worst_fitness, generations_data = aco_bin_packing(k, b, p, e, max_generations)
-
-print("\nBest path found:", best_path)
-print("Best fitness found:", best_fitness)
-print("Worst fitness found:", worst_fitness)
-
-# Optionally, you can print or analyze the data for each generation
-for gen_data in generations_data:
-    print(f"Generation {gen_data['generation']}: Best = {gen_data['best_fitness']}, Worst = {gen_data['worst_fitness']}, Average = {gen_data['average_fitness']}")
-"""
 
 
