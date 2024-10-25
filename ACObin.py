@@ -2,6 +2,7 @@ import random
 from numpy.random import choice
 import numpy as np 
 import time
+import matplotlib.pyplot as plt 
 
 
 def initisalise_pheromones_graph(k, b):
@@ -368,8 +369,128 @@ def run_all_aco_types(k_bpp1, b_bpp1, k_bpp2, b_bpp2, max_evaluations, num_trial
     print(f"Total time taken for all ACO configurations and trials: {elapsed_time:.2f} seconds")
 
 
+def plot_single_aco_type(k, b, p, e, max_evaluations, num_trials, weight_function):
+    """
+    Runs an ACO configuration with 5 trials and plots the best and worst fitnesses
+    Parameters:
+        k (int): the number of items
+        b (int): the number of bins
+        p (int): the number of bins
+        e (float): the evaportation rate
+        max_evaluations (int): the maximum number of fitness evaluations
+        num_trials (int): the number of trials to run
+        weight_function (function): function to calcualte item weights
+    Returns:
+        None
+    """
+    best_fitness_values = []
+    worst_fitness_values = []
+
+    for trial in range(num_trials):
+        trial_seed = random.randint(0, 1000)
+        
+        #runs the ACO algorithm for this configuration and trial
+        best_path, best_fitness, worst_fitness, generations_data = aco_bin_packing(k, b, p, e, max_evaluations, weight_function)
+        
+        # Track best, worst, and average fitness for this trial
+        best_fitness_values.append(best_fitness)
+        worst_fitness_values.append(worst_fitness)
+    
+    # Plot the results for the 5 trials
+    trials = list(range(1, num_trials + 1))
+    bar_width = 0.2 
+
+    #setting positons for the bars
+    r1 = [x - bar_width for x in trials] #positions for best fit
+    r2 = trials #positions for worst fit
+
+    plt.figure(figsize=(10, 6))
+    
+    #plotting bars
+    plt.bar(r1, best_fitness_values, label="Best Fitness", color="green", width=bar_width)
+    plt.bar(r2, worst_fitness_values, label="Worst Fitness", color="red", width=bar_width)
+    
+    plt.xlabel("Trials")
+    plt.ylabel("Fitness")
+    plt.title(f"Fitness Across Trials for p={p}, e={e}")
+    plt.xticks(trials)
+    plt.legend(loc="best")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+    
+
+def plot_all_aco_type(k, b, max_evaluations, num_trials, weight_function, bpp_label):
+    """
+    Runs an ACO configuration with 5 trials and plots the best and worst fitnesses
+    Parameters:
+        k (int): the number of items
+        b (int): the number of bins
+        max_evaluations (int): the maximum number of fitness evaluations
+        num_trials (int): the number of trials to run
+        weight_function (function): function to calcualte item weights
+        bpp_label (str): label for BPP type
+    Returns:
+        None
+    """
+    aco_configs = [
+        (100, 0.90, "p=100, e=0.90"),
+        (100, 0.60, "p=100, e=0.60"),
+        (10, 0.90, "p=10, e=0.90"),
+        (10, 0.60, "p=10, e=0.60")
+    ]
+
+    avg_best_fitness_per_config = {}
+    avg_worst_fitness_per_config = {}
+
+    for p, e, config_label in aco_configs:
+        best_fitness_values = []
+        worst_fitness_values = []
+
+        for trial in range(num_trials):
+            trial_seed = random.randint(0, 1000)
+            
+            #runs the ACO algorithm for this configuration and trial
+            best_path, best_fitness, worst_fitness, generations_data = aco_bin_packing(k, b, p, e, max_evaluations, weight_function)
+            
+            # Track best, worst, and average fitness for this trial
+            best_fitness_values.append(best_fitness)
+            worst_fitness_values.append(worst_fitness)
+    
+    #calculate average stats across the 5 trials
+    avg_best_fitness_per_config[config_label] = sum(best_fitness_values) / num_trials
+    avg_worst_fitness_per_config[config_label] = sum(worst_fitness_values) / num_trials
+
+    # Plot the results for the 5 trials
+    config_label = list(avg_best_fitness_per_config.keys())
+    avg_best_fitness = list(avg_best_fitness_per_config.values())
+    avg_worst_fitness = list(avg_worst_fitness_per_config.values())
+
+    configs = list(range(1, num_trials + 1))
+    bar_width = 0.4
+
+    #setting positons for the bars
+    r1 = [x - bar_width/2 for x in configs] #positions for best fit
+    r2 = [x + bar_width/2 for x in configs] #positions for worst fit
+
+    plt.figure(figsize=(12, 8))
+    
+    #plotting bars
+    plt.bar(r1, avg_best_fitness, label="Best Fitness", color="green", width=bar_width)
+    plt.bar(r2, avg_worst_fitness, label="Worst Fitness", color="red", width=bar_width)
+    
+    plt.xlabel("ACO Configurations")
+    plt.ylabel("Fitness")
+    plt.title(f"Fitness Across Trials ACO Configurations {bpp_label}")
+    plt.legend(loc="best")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+    
+
+
 #TESTING
-##testing single run
+
 k_bpp1 = 500  # Number of items for BPP1
 b_bpp1 = 10   # Number of bins for BPP1
 k_bpp2 = 500  # Number of items for BPP2
@@ -377,14 +498,21 @@ b_bpp2 = 50   # Number of bins for BPP2
 max_evaluations = 10000  # Stop after 10,000 fitness evaluations
 num_trials = 5  # Run 5 trials
 
-# Run a single trial with p=100, e=0.90 for BPP1
+###testing single run
 #run_single_trial(k_bpp1, b_bpp1, p=100, e=0.90, max_evaluations=max_evaluations, seed=random.randint(0, 10000), weight_function=weight_pbb1)
 
 ##testing multiple runs
-#run_multiple_trials(k_bpp1, b_bpp1, p=10, e=0.60, max_evaluations=max_evaluations, num_trials=num_trials, weight_function=weight_pbb1)
+run_multiple_trials(k_bpp1, b_bpp1, p=10, e=0.60, max_evaluations=max_evaluations, num_trials=num_trials, weight_function=weight_pbb1)
 
 ##testing running all ACO types in one go
-run_all_aco_types(k_bpp1, b_bpp1, k_bpp2, b_bpp2, max_evaluations, num_trials)
+#run_all_aco_types(k_bpp1, b_bpp1, k_bpp2, b_bpp2, max_evaluations, num_trials)
 
+##testing plotting one ACO type
+#plot_single_aco_type(k_bpp1, b_bpp1, p=100, e=0.09, max_evaluations=max_evaluations, num_trials=5, weight_function=weight_pbb1)
 
+##testing plotting all ACO types - BPP1
+#plot_all_aco_type(k_bpp1, b_bpp1, max_evaluations, num_trials,weight_pbb1, "BPP1")
+
+##testing plotting all ACO types - BPP2
+#plot_all_aco_type(k_bpp1, b_bpp1, max_evaluations, num_trials,weight_pbb1, "BPP1")
 
