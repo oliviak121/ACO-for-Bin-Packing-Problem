@@ -15,30 +15,26 @@ import os
 def initisalise_pheromones_graph(item_list, b):
     """
     Initialises a construction graph with random pheromone values between 0 and 1
-    parameters:
-        item_list (list): an array holding the weights of each item
-        b (int): the number of bins
-    returns:
-        dic: a dictionary representing pheromone levels for transitions between item-bin parings
+    Parameters:
+        item_list (list): An array holding the weights of each item
+        b (int): The number of bins
+    Returns:
+        dic: A dictionary representing pheromone levels for transitions between item-bin parings
     """
     pheromones_graph = {}
+    pheromones_graph['S'] = {} # Intialise start with with 'S'
 
-    #intialise start with with 'S'
-    pheromones_graph['S'] = {}
-
-    #creating edges for each item in the item_list except the last
+    # Creating edges for each item in the item_list except the last
     for item_num, item in enumerate(item_list):
-        
         for bin_num in range(1, b + 1):
-            #current key is (the bin number, the item weight)
             current_key = (bin_num, item)
             pheromones_graph[current_key] = {}
             
-            #starting construction graph from Start node and connecting to first bin
+            # Starting construction graph from Start node and connecting to first bin
             if item_num == 0:
                 pheromones_graph['S'][current_key] = random.uniform(0,1)
             
-            #Connecting the last bin to the End node 
+            # Connecting the last bin to the End node 
             if item_num == len(item_list) -1:
                 pheromones_graph[current_key]['E'] = random.uniform(0,1)
 
@@ -46,44 +42,43 @@ def initisalise_pheromones_graph(item_list, b):
                 #connecting current (bin, item) to next (bin, next_item)
                 for next_bin_num in range (1, b + 1):
                     next_item = item_list[item_num +1]
-                    next_key = (next_bin_num, next_item) #unique key for next state
+                    next_key = (next_bin_num, next_item) 
                     pheromones_graph[current_key][next_key] = random.uniform(0,1)
 
     
     #pprint.pprint(pheromones_graph)
     return pheromones_graph
         
-
 def construct_ant_path(pheromones_graph, item_list, b):
     """
     Constructs a path for an ant by selecting a bin for each item based on pheromone levels
-    parameters:
-        pheromones_graph (dict): the construction graph with the pheromone values for each item-bin edge
-        item_list (list): an array holding the weights of each item
-        b (int): the number of bins
-    returns:
-        list: a path the ant traverses, where each element is a tuple (bin, item)
+    Parameters:
+        pheromones_graph (dict): The construction graph with the pheromone values for each item-bin edge
+        Item_list (list): An array holding the weights of each item
+        b (int): The number of bins
+    Returns:
+        list: A path the ant traverses, where each element is a tuple (bin, item)
     """
     path = []
-    current_state = 'S' #starts at S
+    current_state = 'S' #Starts at S
 
-    #traversing items in the list
+    # Traversing items in the list
     for item_num in range(len(item_list)):
         if current_state not in pheromones_graph:
             break 
 
-        #the possible next states and tehir corresponding pheromones
+        # The possible next states and thier corresponding pheromones
         possible_next_bins = pheromones_graph[current_state]
 
-        #when reached end node, break
+        # When reached end node, break
         if 'E' in possible_next_bins:
             break
 
-        #calculate the total pheromones for the cumulaative probability
+        # Calculate the total pheromones for the cumulaative probability
         total_pheromones = sum(possible_next_bins.values())
         random_value = random.uniform(0, total_pheromones)
 
-        #choose next bin 
+        # Choose next bin 
         cumulative_sum = 0
         next_state = None
         for next_bin, pheromone in possible_next_bins.items():
@@ -92,7 +87,7 @@ def construct_ant_path(pheromones_graph, item_list, b):
                 next_state = next_bin
                 break 
         
-        #add to path and update current state
+        # Add to path and update current state
         if next_state:
             path.append(next_bin)
             current_state = next_state
@@ -103,12 +98,12 @@ def construct_ant_path_generation(pheromones_graph, p, item_list, b):
     """
     Constructs the paths for a populaiton of ants
     Parameters:
-        pheromones_graph (dict): the construction graph with the pheromone values for each item-bin edge
-        p (int): the number of ants
-        item_list (list): an array holding the weights of each item
-        b (int): the number of bins
+        pheromones_graph (dict): The construction graph with the pheromone values for each item-bin edge
+        p (int): The number of ants
+        item_list (list): An array holding the weights of each item
+        b (int): The number of bins
     Returns:
-        list of lists: a list where each element is a path generated by an ant
+        list of lists: A list where each element is a path generated by an ant
     """
     paths = []
 
@@ -123,43 +118,41 @@ def calculate_fitness(path, b):
     """
     Calculates the fitness of an ant's path, which is the difference between the resulting heaviest and lightest bins total weight
     Parameters:
-        path (list): a path the ant transferses, where each element is the bin for the corresponding item
-        b (int): the number of bins
+        path (list): A path the ant transferses, where each element is the bin for the corresponding item
+        b (int): The number of bins
     Returns:
-        float: the fitness value, which is the difference between the resulting heaviest and lightest bins total weight
+        float: The fitness value, which is the difference between the resulting heaviest and lightest bins total weight
     """
-    # itisalise bin weights to zero
-    bin_weights = [0] * b
+    bin_weights = [0] * b # Tnitialse bin weights to zero
 
-    # distribute the item's weights into the corresponding bins
+    # Distribute the item's weights into the corresponding bins
     for bin_num, item_weight in path:
-        if bin_num == 'E': #Skip if reached end node
+        if bin_num == 'E': # Skip if reached end node
             continue
-        bin_weights[bin_num -1] += item_weight #update weight of corresponding bin
+        bin_weights[bin_num -1] += item_weight # Update weight of corresponding bin
 
-        # calculate the fitness as difference between the heaviest and lightest bins 
+        # Calculate the fitness as difference between the heaviest and lightest bins 
         fitness = max(bin_weights) - min(bin_weights)
 
-    # return fitness
     return fitness
 
 def evaluate_population_fitness(paths, b):
     """
     Evaluates the fitness of each ant's path in generation and finds the best-performing path
     Parameters:
-        paths (list of lists): a list of paths generated by ants in the generation
-        b (int): the number of bins
+        paths (list of lists): A list of paths generated by ants in the generation
+        b (int): The number of bins
     Returns:
-        tuple: the best path and its corresponding fitness value
+        tuple: The best path and its corresponding fitness value
     """
-    best_fitness = float('inf') #initialised with very high value
+    best_fitness = float('inf') # Initialised with very high value
     best_path = None
 
     for path in paths:
-        #calculate fitness of path
+        # Calculate fitness of path
         fitness = calculate_fitness(path, b)
 
-        #if fitness of path is better than best_path then update
+        # If fitness of path is better than best_path then update
         if fitness < best_fitness:
             best_fitness = fitness
             best_path = path 
@@ -170,25 +163,25 @@ def pheromone_update(pheromones_graph, paths, fitnesses, e):
     """
     Updates the pheromone levels in the construction graph based on the ants paths and their fitness values
     Perameters:
-        pheromones_graph (dict): construction graph of pheromones values for each item-bin pair before the update 
-        paths (list of lists): a list of paths generated by ants in the generation
-        fitness (list of floats): the fitness values corresponding to each path
-        e (float): the rate of pheromone evaporation 
+        pheromones_graph (dict): Construction graph of pheromones values for each item-bin pair before the update 
+        paths (list of lists): A list of paths generated by ants in the generation
+        fitness (list of floats): The fitness values corresponding to each path
+        e (float): The rate of pheromone evaporation 
     Returns: 
-        dict: the updated construction graph with the new pheromone values
+        dict: The updated construction graph with the new pheromone values
     """
     
-    #pheromone reinforcement: increase pheromone values based on path fitness
+    # Pheromone reinforcement: increase pheromone values based on path fitness
     for path, fitness in zip(paths, fitnesses):
-        pheromone_update = 100/max(fitness, 1e-6) #the better the fitness the higher the pheromone deposit, also prevents division by zero
+        pheromone_update = 100/max(fitness, 1e-6) # The better the fitness the higher the pheromone deposit, also prevents division by zero
 
-        #update pheromones along the path
+        # Update pheromones along the path
         for i in range(len(path) -1):
             current_key = path[i]
             next_key = path[i +1]
             pheromones_graph[current_key][next_key] += pheromone_update
 
-    #pheromone evaporation: decreases all pheromone values my multiplying by evaporation rate
+    # Pheromone evaporation: decreases all pheromone values my multiplying by evaporation rate
     for key in pheromones_graph:
         for sub_key in pheromones_graph[key]:
             pheromones_graph[key][sub_key] *= e 
@@ -199,10 +192,10 @@ def evaluate_generation(ant_paths, b):
     """
     Evaluates the fitness of each ant's path in a generation
     Parameters:
-        ant_paths (list of lists): a list where each element is a path traversed by an ant
-        b (int): the number of bins
+        ant_paths (list of lists): A list where each element is a path traversed by an ant
+        b (int): The number of bins
     Returns:
-        list: a list of fitness values for each ant's path
+        list: A list of fitness values for each ant's path
     """
     fitnesses = [calculate_fitness(path, b) for path in ant_paths]
     return fitnesses
@@ -211,11 +204,11 @@ def aco_bin_packing(item_list, b, p, e, max_evaluations):
     """
     The main ACO loop for the Bin Packing Probelem using ACO
     Parameters:
-        item_list (list): an array holding the weights of each item
-        b (int): the number of bins
-        p (int): the number of ants (paths) per generation
-        e (float): the evaporation rate
-        max_evaluations (int): the number of fitness evaluations to run ACO algorithm before quiting
+        item_list (list): An array holding the weights of each item
+        b (int): The number of bins
+        p (int): The number of ants (paths) per generation
+        e (float): The evaporation rate
+        max_evaluations (int): The number of fitness evaluations to run ACO algorithm before quiting
     Returns:
         dict: Dictionary containing:
             - 'all_generations_data': List of dicts with fitness values for each generation
@@ -225,27 +218,27 @@ def aco_bin_packing(item_list, b, p, e, max_evaluations):
     """
     # initialse pheromone graph
     pheromones_graph = initisalise_pheromones_graph(item_list, b)
-    total_evaluations = 0 # to track num of fitness evaluations 
+    total_evaluations = 0 # To track num of fitness evaluations 
     all_generations_data = []
 
     best_overall_fitness = float('inf')
     worst_overall_fitness = float('-inf')
     best_overall_path = None
 
-    # main loop for running ACO untill max evaluations is reached
+    # Main loop for running ACO untill max evaluations is reached
     while total_evaluations < max_evaluations:
 
-        #construct each path for population
+        # Construct each path for population
         ant_paths = construct_ant_path_generation(pheromones_graph, p, item_list, b)
         generation_fitnesses = evaluate_generation(ant_paths, b)
-        #update total fitness evaluations
+        # Update total fitness evaluations
         total_evaluations += len(ant_paths)
 
-        #generation stats
+        # Update generation stats
         gen_best_fitness = min(generation_fitnesses)
         gen_worst_fitness = max(generation_fitnesses)
 
-        #update best and worst fitnesses and paths
+        # Update best and worst fitnesses and paths
         for path, fitness in zip(ant_paths, generation_fitnesses):
             if fitness <best_overall_fitness:
                 best_overall_fitness = fitness
@@ -253,7 +246,7 @@ def aco_bin_packing(item_list, b, p, e, max_evaluations):
             if fitness > worst_overall_fitness:
                 worst_overall_fitness = fitness
 
-        #update generational data
+        # Update generational data
         all_generations_data.append({
             'generation': total_evaluations // p,
             'best_fitness': gen_best_fitness,
@@ -261,13 +254,8 @@ def aco_bin_packing(item_list, b, p, e, max_evaluations):
             'best_fitness_so_far': best_overall_fitness
         })
 
-        #update pheromones graph
+        # Update pheromones graph
         pheromones_graph = pheromone_update(pheromones_graph, ant_paths, generation_fitnesses, e)
-
-        #print generation stats
-        #print(f"  \nBest fitness in generation {total_evaluations/100}: {best_fitness}")
-        #print(f"  Worst fitness in generation {total_evaluations/100}: {worst_fitness}")
-        #print(f"  Best overall fitness so far: {best_overall_fitness}")
 
     return{
         'all_generations_data': all_generations_data,
@@ -281,21 +269,21 @@ def run_multiple_trials(item_list, b, p, e, max_evaluations, num_trials, config_
     """
     Runs multiple trials (5 as specified in coursework) for an ACO configuration
     Parameters:
-        item_list (list): an array holding the weights of each item
-        b (int): the number of bins
-        p (int): the number of ants
-        e (float): the evaporation rate
-        max_evaluations (int): the maxiumum number of fitness evaluations 
-        num_trials (int): the number of trials to run
-        config_label (str): label describing the ACO configurations
+        item_list (list): An array holding the weights of each item
+        b (int): The number of bins
+        p (int): The number of ants
+        e (float): The evaporation rate
+        max_evaluations (int): The maxiumum number of fitness evaluations 
+        num_trials (int): The number of trials to run
+        config_label (str): Label describing the ACO configurations
     Returns:
-        list: a list of results for each trial
+        list: A list of results for each trial
     """
     trial_results = []
     start_time = time.time()
     
     for trial in range(num_trials):
-        trial_seed = trial+1 #so trials across ACO types can have the same seed
+        trial_seed = trial+1 # So trials across ACO types can have the same seed
         random.seed(trial_seed)
 
         print(f"Starting trial {trial +1} with seed {trial_seed}")
@@ -320,19 +308,18 @@ def run_multiple_trials(item_list, b, p, e, max_evaluations, num_trials, config_
     total_duration = time.time() - start_time
     print(f"All {num_trials} completed in {total_duration:.2f} seconds")
 
-
     return trial_results 
 
 def run_all_aco_variants(item_list, b, max_evaluations, num_trials):
     """
     Runs all the ACO with multiple trials for each for one BPP type
     Parameters:
-        item_list (list): an array holding the weights of each item 
-        b (int): the number of bins
-        max_evaluations (int): the maxiumum number of fitness evaluations 
-        num_trials (int): the number of trials to run
+        item_list (list): An array holding the weights of each item 
+        b (int): The number of bins
+        max_evaluations (int): The maxiumum number of fitness evaluations 
+        num_trials (int): The number of trials to run
     Returns:
-        dict: a dictionary with results for all the ACO configurations
+        dict: A dictionary with results for all the ACO configurations
     """
     aco_configs = [
         (100, 0.90, "p=100, e=0.90"),  
@@ -359,7 +346,7 @@ def run_all_aco_variants(item_list, b, max_evaluations, num_trials):
     overall_duration = BPP_end_time - BPP_start_time
     print(f"BPP completed in {overall_duration:.2f} seconds")
 
-    #ouput all results to CSV
+    # Ouput all results to CSV
     output_all_results_to_csv(all_results)
 
     return all_results
@@ -369,13 +356,15 @@ def output_trial_results_to_csv(trial, all_generations_data, config_label):
     Outputs genreational fitness data to a CSV file for each trial
     Parameters:
         trial (int): The trial number
-        all_generations_data (list of dicts): ach dictionary contains detailed fitness information for each generation
-        config_label (str): label describing the ACO configurations
+        all_generations_data (list of dicts): Each dictionary contains detailed fitness information for each generation
+        config_label (str): Label describing the ACO configurations
     Returns:
         None
     """
+    # Format the config label so it works when plugging it into an output file name
     config_label_formatted = config_label.replace(", ", "_").replace("=", "").replace(".", "_")
     filename = f"{config_label_formatted}_results_trial_{trial}.csv"
+
     with open(filename, 'w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(['Generation', 'Best Fitness', 'Worst Fitness', 'Best Fitness So Far'])
@@ -384,6 +373,13 @@ def output_trial_results_to_csv(trial, all_generations_data, config_label):
                 data['generation'], data['best_fitness'], data['worst_fitness'], data['best_fitness_so_far']])
 
 def output_all_results_to_csv(all_results):
+    """
+    Outputs all ACO resuls to a CSV file
+    Prameters:
+        all_results (dict): Dictionrary containing all results from ACO configurations
+    Returns:
+        None
+    """
     with open('all_aco_results.csv', 'w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(['Configuration', 'Trial', 'Best Fitness', 'Worst Fitness'])
@@ -401,22 +397,22 @@ def plot_aco_performance():
     """
     config_labels = ["p=100, e=0.90", "p=100, e=0.60", "p=10, e=0.90", "p=10, e=0.60"]
 
-    #set up the plot with a subplot for each configuration
+    # Set up the plot with a subplot for each configuration
     fig, axes = plt.subplots(nrows= round(len(config_labels)/2), ncols= 2)
     axes = axes.flatten() #flatten the 2array for easy iteration
 
-    #iterate over each configuration to create a subplot
+    # Iterate over each configuration to create a subplot
     for ax, config_label in zip(axes, config_labels):
         config_label_formatted = config_label.replace(", ", "_").replace("=", "").replace(".", "_")
         for trial in range(1, 6):
             filename = f'{config_label_formatted}_results_trial_{trial}.csv'
             if os.path.exists(filename):
                 data = pd.read_csv(filename)
-                #plot the line graph for this trial
+                # Plot the line graph for this trial
                 ax.plot(data['Generation'], data['Best Fitness'], label=f'Trial {trial}')
 
         ax.set_title(f'Performance of ACO Configuration: {config_label}')
-        ax.set_xlim((0,len(data['Generation'])))
+        ax.set_xlim((0, len(data['Generation'])))
         ax.set_xlabel('Generation')
         ax.set_ylabel('Fitness')
         ax.legend(loc="upper right")
@@ -426,9 +422,17 @@ def plot_aco_performance():
     plt.show()
 
 def plot_best_fitness():
+    """
+    Plots the best fitnesses across configuratins with bars for each of the 5 trials
+    Parameters:
+        None
+    Returns:
+        None
+    """
     config_labels = ["p=100, e=0.90", "p=100, e=0.60", "p=10, e=0.90", "p=10, e=0.60"]
     best_fitnesses = []
-    #plotting
+
+    # Plotting setup
     fig, ax = plt.subplots(figsize=(10, 8))
     indices = np.arange(len(config_labels))
     bar_width = 0.17
@@ -436,7 +440,7 @@ def plot_best_fitness():
     bar_array = np.zeros((5, len(config_labels)))
     multiplier = 0
 
-    #collecting best fitness data
+    # Collecting best fitness data
     for i in range(len(config_labels)):
         config_fitnesses = []
         config_label_formatted = config_labels[i].replace(", ", "_").replace("=", "").replace(".", "_")
@@ -448,7 +452,7 @@ def plot_best_fitness():
                 best_fitness = (data['Best Fitness'].min())
                 bar_array[trial-1][i] = best_fitness
 
-                
+    # Plotting each trial     
     for i in range(5):
         rects = ax.bar(x + bar_width*multiplier -bar_width*2, bar_array[i], bar_width, label = f'Trial {i+1}')
         ax.bar_label(rects, padding=3)
@@ -457,8 +461,6 @@ def plot_best_fitness():
     ax.set_xlabel('Configuration')
     ax.set_ylabel('Best Fitness')
     ax.set_title('Best fitness Across Configurations and Trials')
-    # ax.set_xticks(indices + bar_width * 2)
-    # ax.set_xtickslabels(config_labels)
     ax.legend(loc="lower left")
 
     plt.xticks(x, config_labels)
@@ -468,13 +470,12 @@ def plot_best_fitness():
 
 #TESTING
 
-bpp1_items = [i for i in range(1, 501)]
-bpp2_items = [(i**2)/2 for i in range (1, 501)]
-bpp1_b = 10 #num of bins
-bpp2_b = 50
-max_evaluations = 10000
-num_trials = 5
-log_filename = 'aco_results_log.txt'
+bpp1_items = [i for i in range(1, 501)] # Item list for BPP1
+bpp2_items = [(i**2)/2 for i in range (1, 501)] # Item list for BPP2
+bpp1_b = 10 # Num of bins for BPP1
+bpp2_b = 50 # Num of bins for BPP2
+max_evaluations = 10000 # The number of fitness evaluations
+num_trials = 5 # Num of trials
 
 '''
 pheromones_graph = initisalise_pheromones_graph(item_list,b)
@@ -491,6 +492,9 @@ updated_pheromones_graph = pheromone_update(pheromones_graph, paths, fitnesses, 
 pprint.pprint(updated_pheromones_graph)
 '''
 
-run_all_aco_variants(bpp2_items, bpp1_b, max_evaluations, num_trials)
+# Running the code: change bpp1_items to bpp2_items and bpp1_b to bpp2_b to run BPP2
+# Running BPP
+run_all_aco_variants(bpp1_items, bpp1_b, max_evaluations, num_trials)
+# Plotting BPP
 plot_aco_performance()
 plot_best_fitness()
