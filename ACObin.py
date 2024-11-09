@@ -3,74 +3,109 @@ from numpy.random import choice
 import numpy as np 
 import time
 import matplotlib.pyplot as plt 
+import pandas as pd
 import contextlib
+import cProfile
+import pprint
+import re
+import csv
+import os
 
 
-def initisalise_pheromones_graph(k, b):
+def initisalise_pheromones_graph(item_list, b):
     """
     Initialises a construction graph with random pheromone values between 0 and 1
     parameters:
-        k (int): the number of items
+        item_list (list): an array holding the weights of each item
         b (int): the number of bins
     returns:
-        dic: a dictionary representing the construction graph of where 
-        each key is and the value is a dictionary of bins and their 
-        corresponding pheromone values
+        dic: a dictionary representing pheromone levels for transitions between item-bin parings
     """
     pheromones_graph = {}
 
-    for item in range(1, k +1): #loop over each item
-        pheromones_graph[item] = {}
-        for bin_num in range(1, b + 1): #loop over each bin for the item
-            #initilse each edge with a random pheromone value
-            pheromones_graph[item][bin_num] = random.uniform(0, 1)
+    #intialise start with with 'S'
+    pheromones_graph['S'] = {}
 
+    #creating edges for each item in the item_list except the last
+    for item_num, item in enumerate(item_list):
+        
+        for bin_num in range(1, b + 1):
+            #current key is (the bin number, the item weight)
+            current_key = (bin_num, item)
+            pheromones_graph[current_key] = {}
+            
+            #starting construction graph from Start node and connecting to first bin
+            if item_num == 0:
+                pheromones_graph['S'][current_key] = random.uniform(0,1)
+            
+            #Connecting the last bin to the End node 
+            if item_num == len(item_list) -1:
+                pheromones_graph[current_key]['E'] = random.uniform(0,1)
+
+            if item_num != len(item_list) -1:
+                #connecting current (bin, item) to next (bin, next_item)
+                for next_bin_num in range (1, b + 1):
+                    next_item = item_list[item_num +1]
+                    next_key = (next_bin_num, next_item) #unique key for next state
+                    pheromones_graph[current_key][next_key] = random.uniform(0,1)
+
+    
+    #pprint.pprint(pheromones_graph)
     return pheromones_graph
         
 
-def construct_ant_path(pheromones_graph, k, b):
+def construct_ant_path(pheromones_graph, item_list, b):
     """
     Constructs a path for an ant by selecting a bin for each item based on pheromone levels
     parameters:
         pheromones_graph (dict): the construction graph with the pheromone values for each item-bin edge
-        k (int): the number of items
+        item_list (list): an array holding the weights of each item
         b (int): the number of bins
     returns:
-    list: a path the ant transferses, where each element is the bin for the corresponding item
+        list: a path the ant traverses, where each element is a tuple (bin, item)
     """
     path = []
+    current_state = 'S' #starts at S
 
-    for item in range (1, k + 1):
-        # get pheromone values for current item
-        pheromones = pheromones_graph[item]
+    #traversing items in the list
+    for item_num in range(len(item_list)):
+        if current_state not in pheromones_graph:
+            break 
 
-        # calculate the total sum of all the pheromone paths for this item - normalisation
-        total_pheromones = sum(pheromones.values())
+        #the possible next states and tehir corresponding pheromones
+        possible_next_bins = pheromones_graph[current_state]
 
-        # generate random number between 0 and total pheromone for the threshold
-        random_threshold = random.uniform(0, total_pheromones)
+        #when reached end node, break
+        if 'E' in possible_next_bins:
+            break
 
-        # selecting which bin to go to next
-        cumulative_pheromone = 0
-        selected_bin = 1
-        for bin_num in range (1, b + 1):
-            cumulative_pheromone += pheromones[bin_num]
-            if cumulative_pheromone >= random_threshold:
-                selected_bin = bin_num
-                break
+        #calculate the total pheromones for the cumulaative probability
+        total_pheromones = sum(possible_next_bins.values())
+        random_value = random.uniform(0, total_pheromones)
 
-        # append the selected bin to the path
-        path.append(selected_bin)
+        #choose next bin 
+        cumulative_sum = 0
+        next_state = None
+        for next_bin, pheromone in possible_next_bins.items():
+            cumulative_sum += pheromone
+            if random_value <= cumulative_sum:
+                next_state = next_bin
+                break 
+        
+        #add to path and update current state
+        if next_state:
+            path.append(next_bin)
+            current_state = next_state
     
     return path
 
-def construct_ant_path_generation(pheromones_graph, p, k, b):
+def construct_ant_path_generation(pheromones_graph, p, item_list, b):
     """
     Constructs the paths for a populaiton of ants
     Parameters:
         pheromones_graph (dict): the construction graph with the pheromone values for each item-bin edge
         p (int): the number of ants
-        k (int): the number of items
+        item_list (list): an array holding the weights of each item
         b (int): the number of bins
     Returns:
         list of lists: a list where each element is a path generated by an ant
@@ -78,20 +113,18 @@ def construct_ant_path_generation(pheromones_graph, p, k, b):
     paths = []
 
     for ants in range(p):
-        path = construct_ant_path(pheromones_graph, k, b)
+        path = construct_ant_path(pheromones_graph, item_list, b)
         paths.append(path)
 
     return paths 
 
 
-def calculate_fitness(path, k, b, weight_function):
+def calculate_fitness(path, b):
     """
     Calculates the fitness of an ant's path, which is the difference between the resulting heaviest and lightest bins total weight
     Parameters:
         path (list): a path the ant transferses, where each element is the bin for the corresponding item
-        k (int): the number of items
         b (int): the number of bins
-        weight_function (function): function to calculate the weight of an item
     Returns:
         float: the fitness value, which is the difference between the resulting heaviest and lightest bins total weight
     """
@@ -99,30 +132,32 @@ def calculate_fitness(path, k, b, weight_function):
     bin_weights = [0] * b
 
     # distribute the item's weights into the corresponding bins
-    for item_index, bin_index in enumerate(path):
-        # calculate item weight based on weight function 
-        item_weight = weight_function(item_index + 1)
-        bin_weights[bin_index - 1] += item_weight #update the weight of the corresponding bin 
+    for bin_num, item_weight in path:
+        if bin_num == 'E': #Skip if reached end node
+            continue
+        bin_weights[bin_num -1] += item_weight #update weight of corresponding bin
+
+        # calculate the fitness as difference between the heaviest and lightest bins 
+        fitness = max(bin_weights) - min(bin_weights)
 
     # return fitness
-    return max(bin_weights) - min(bin_weights)
+    return fitness
 
-def evaluate_population_fitness(paths, k, b):
+def evaluate_population_fitness(paths, b):
     """
     Evaluates the fitness of each ant's path in generation and finds the best-performing path
     Parameters:
         paths (list of lists): a list of paths generated by ants in the generation
-        k (int): the number of items
         b (int): the number of bins
     Returns:
-        touble: the best path and its corresponding fitness value
+        tuple: the best path and its corresponding fitness value
     """
     best_fitness = float('inf') #initialised with very high value
     best_path = None
 
     for path in paths:
         #calculate fitness of path
-        fitness = calculate_fitness(path, k, b)
+        fitness = calculate_fitness(path, b)
 
         #if fitness of path is better than best_path then update
         if fitness < best_fitness:
@@ -131,438 +166,331 @@ def evaluate_population_fitness(paths, k, b):
 
     return best_path, best_fitness
 
-def pheromone_update(pheromones_graph, paths, fitnesses, b, e):
+def pheromone_update(pheromones_graph, paths, fitnesses, e):
     """
     Updates the pheromone levels in the construction graph based on the ants paths and their fitness values
     Perameters:
         pheromones_graph (dict): construction graph of pheromones values for each item-bin pair before the update 
         paths (list of lists): a list of paths generated by ants in the generation
         fitness (list of floats): the fitness values corresponding to each path
-        b (int): the number of bins 
         e (float): the rate of pheromone evaporation 
     Returns: 
         dict: the updated construction graph with the new pheromone values
     """
-    #pheromone evaporation: decreases all pheromone values my multiplying by evaporation rate
-    for item in pheromones_graph:
-        for bin_num in range(1, b + 1):
-            pheromones_graph[item][bin_num] *= e 
     
     #pheromone reinforcement: increase pheromone values based on path fitness
     for path, fitness in zip(paths, fitnesses):
         pheromone_update = 100/max(fitness, 1e-6) #the better the fitness the higher the pheromone deposit, also prevents division by zero
 
         #update pheromones along the path
-        for item_index, bin_index in enumerate(path):
-            pheromones_graph[item_index + 1][bin_index] += pheromone_update
+        for i in range(len(path) -1):
+            current_key = path[i]
+            next_key = path[i +1]
+            pheromones_graph[current_key][next_key] += pheromone_update
+
+    #pheromone evaporation: decreases all pheromone values my multiplying by evaporation rate
+    for key in pheromones_graph:
+        for sub_key in pheromones_graph[key]:
+            pheromones_graph[key][sub_key] *= e 
 
     return pheromones_graph
 
-def aco_bin_packing(k, b, p, e, max_evaluations, weight_function):
+def evaluate_generation(ant_paths, b):
+    """
+    Evaluates the fitness of each ant's path in a generation
+    Parameters:
+        ant_paths (list of lists): a list where each element is a path traversed by an ant
+        b (int): the number of bins
+    Returns:
+        list: a list of fitness values for each ant's path
+    """
+    fitnesses = [calculate_fitness(path, b) for path in ant_paths]
+    return fitnesses
+
+def aco_bin_packing(item_list, b, p, e, max_evaluations):
     """
     The main ACO loop for the Bin Packing Probelem using ACO
     Parameters:
-        k (int): the number of items
+        item_list (list): an array holding the weights of each item
         b (int): the number of bins
         p (int): the number of ants (paths) per generation
         e (float): the evaporation rate
         max_evaluations (int): the number of fitness evaluations to run ACO algorithm before quiting
     Returns:
-        touple: the best, worst, and average fitness values over trial, with total fitness evaluations
+        dict: Dictionary containing:
+            - 'all_generations_data': List of dicts with fitness values for each generation
+            - 'best_overall_path': Best path found across all generations
+            - 'best_overall_fitness': Best fitness value found across all generations
+            - 'worst_overall_fitness': Worst fitness value found across all generations
     """
     # initialse pheromone graph
-    pheromones_graph = initisalise_pheromones_graph(k,b)
-
-    best_overall_path = None
-    best_overall_fitness = float('inf')
-    worst_overall_fitness = float('-inf')
+    pheromones_graph = initisalise_pheromones_graph(item_list, b)
     total_evaluations = 0 # to track num of fitness evaluations 
     all_generations_data = []
+
+    best_overall_fitness = float('inf')
+    worst_overall_fitness = float('-inf')
+    best_overall_path = None
 
     # main loop for running ACO untill max evaluations is reached
     while total_evaluations < max_evaluations:
 
         #construct each path for population
-        ant_paths = construct_ant_path_generation(pheromones_graph, p, k, b)
-        
-        #evaluate fitness of each path
-        fitnesses = [calculate_fitness(path, k, b, weight_function) for path in ant_paths]
-    
+        ant_paths = construct_ant_path_generation(pheromones_graph, p, item_list, b)
+        generation_fitnesses = evaluate_generation(ant_paths, b)
         #update total fitness evaluations
-        total_evaluations += p
+        total_evaluations += len(ant_paths)
 
-        #find stats for generation
-        best_fitness = min(fitnesses)
-        worst_fitness = max(fitnesses)
-        average_fitness = sum(fitnesses)/p
+        #generation stats
+        gen_best_fitness = min(generation_fitnesses)
+        gen_worst_fitness = max(generation_fitnesses)
 
-        #find best path in this generation
-        best_path_index = fitnesses.index(best_fitness)
-        best_path = ant_paths[best_path_index]
+        #update best and worst fitnesses and paths
+        for path, fitness in zip(ant_paths, generation_fitnesses):
+            if fitness <best_overall_fitness:
+                best_overall_fitness = fitness
+                best_overall_path = path
+            if fitness > worst_overall_fitness:
+                worst_overall_fitness = fitness
 
-        #update the pheromones based on the fitness
-        pheromones_graph = pheromone_update(pheromones_graph, ant_paths, fitnesses, b, e)
-
-        #track the overall best solutions for all generations
-        if best_fitness < best_overall_fitness:
-            best_overall_fitness = best_fitness
-            best_overall_path = best_path
-
-        #track worst overall fitness
-        if worst_fitness > worst_overall_fitness:
-            worst_overall_fitness = worst_fitness
-
-        #store the generation data 
+        #update generational data
         all_generations_data.append({
-            'total_evaluations': total_evaluations,
-            'best_fitness': best_fitness,
-            'worst_fitness': worst_fitness,
-            'average_fitness': average_fitness
+            'generation': total_evaluations // p,
+            'best_fitness': gen_best_fitness,
+            'worst_fitness': gen_worst_fitness,
+            'best_fitness_so_far': best_overall_fitness
         })
+
+        #update pheromones graph
+        pheromones_graph = pheromone_update(pheromones_graph, ant_paths, generation_fitnesses, e)
 
         #print generation stats
         #print(f"  \nBest fitness in generation {total_evaluations/100}: {best_fitness}")
         #print(f"  Worst fitness in generation {total_evaluations/100}: {worst_fitness}")
-        #print(f"  Average fitness in generation {total_evaluations/100}: {average_fitness}")
-        print(f"  Best overall fitness so far: {best_overall_fitness}")
+        #print(f"  Best overall fitness so far: {best_overall_fitness}")
 
-    return best_overall_path, best_overall_fitness, worst_overall_fitness, all_generations_data
+    return{
+        'all_generations_data': all_generations_data,
+        'best_overall_path': best_overall_path,
+        'best_overall_fitness': best_overall_fitness,
+        'worst_overall_fitness': worst_overall_fitness
+    }
 
-def weight_pbb1(i):
+
+def run_multiple_trials(item_list, b, p, e, max_evaluations, num_trials, config_label):
     """
-    Generates weights of item i for BPP1 - item i has weight i
+    Runs multiple trials (5 as specified in coursework) for an ACO configuration
     Parameters:
-        i (int): the item index
-    Returns:
-        list: the weight of the item
-    """
-    return i
-
-def weight_pbb2(i):
-    """
-    Generates weights of item i for BPP2 - item i has weight (i^2)/2
-    Parameters:
-        i (int): the item index
-    Returns:
-        list: the weight of the item
-    """
-    return (i ** 2)/2 
-
-
-def run_single_trial(k, b, p, e, max_evaluations, seed, weight_function):
-    """
-    Runs a single trial for a specific ACO configuration with fixed seed
-    Parameters:
-        k (int): the number of items
+        item_list (list): an array holding the weights of each item
         b (int): the number of bins
         p (int): the number of ants
         e (float): the evaporation rate
-        max_evaluations (int): the maximum number of fitness evaluations
-        seed (int): the random seed to use for reproducibility
-        weight_function (function): the function to calculate the item weights
-    Returns:
-        None 
-    """
-    # set random seed
-    random.seed(seed)
-
-    print(f"\nRunning single trial with p={p}, e={e}, seed={seed}")
-
-    #record start time
-    start_time = time.time()
-
-    # run the aco algorithm
-    best_path, best_fitness, worst_fitness, generations_data = aco_bin_packing(k, b, p, e, max_evaluations, weight_function)
-
-    # calculate average fitness over all generations
-    total_fitness_sum = sum(gen_data['average_fitness'] for gen_data in generations_data)
-    num_generations = len(generations_data)
-    avg_fitness = total_fitness_sum/ num_generations if num_generations > 0 else 0
-
-    #record end time and calculate time elapsed
-    end_time = time.time()
-    elapsed_time = end_time - start_time
-
-    # output results
-    #print(f"Best fitness: {best_fitness}")
-    #print(f"Worst fitness: {worst_fitness}")
-    #print(f"Average fitness over the trial: {avg_fitness:.2f}")
-    
-    #print("Generation data:")
-    #for gen_data in generations_data:
-    #    print(f"Total Evaluations: {gen_data['total_evaluations']}, Best = {gen_data['best_fitness']}, Worst = {gen_data['worst_fitness']}, Average = {gen_data['average_fitness']}")
-    
-    # output the total time taken to run the trial
-    print (f"Time taken for this trial: {elapsed_time:.2f} seconds")
-
-    #testing plotting best fitness across one trial
-    aco_label = (f"p = {p}, e = {e}")
-    if weight_function == weight_pbb1:
-        bpp_label = "BPP1"
-    elif weight_function == weight_pbb2:
-        bpp_label = "BPP2"
-    else:
-        bpp_label = 'ERROR'
-    plot_generation_fitness(generations_data, aco_label, bpp_label)
-
-def run_multiple_trials(k, b, p, e, max_evaluations, num_trials, weight_function):
-    """
-    Runs multiple trials (usually will be 5) of the same ACO configuration, using a different seed for each trial
-    Parameters:
-        k (int): the number of items
-        b (int): the number of bins
-        p (int): the number of ants
-        e (float): the evaporation rate
-        max_evaluations (int): the maximum number of fitness evaluations per trial
-        num_trials (int): number of trials to run
-        weight_function (function): the function to calculate the item weights
-    Returns:
-        None
-    """
-    #record start time
-    start_time = time.time()
-
-    for trial in range(num_trials):
-        # generate new random seed for each trial
-        trial_seed = random.randint(0, 10000)
-        print(f"\nStarting Trial {trial +1} with seed {trial_seed}")
-        run_single_trial(k, b, p, e, max_evaluations, trial_seed, weight_function)
-    
-    #record end time and calculate time elapsed
-    end_time = time.time()
-    elapsed_time = end_time - start_time
-    print(f"Time taken for all {num_trials} trials: {elapsed_time:.2f} seconds")
-
-def run_all_aco_types(k, b, max_evaluations, num_trials, weight_function):
-    """
-    Runs all ACO configurations (4 types) with 5 trials each for BPP
-    Parameters:
-        k (int): the number of items 
-        b (int): the number of bins 
-        max_evaluations (int): The maximum number of fitness evaluations per trial
-        num_trials (int): Number of trials to run for each configuration
-    Returns:
-        None
-    """
-    # record start time
-    start_time = time.time()
-
-    # ACO configurations
-    aco_configs = [
-        (100, 0.90),  # p = 100, e = 0.90
-        (100, 0.60),  # p = 100, e = 0.60
-        (10, 0.90),   # p = 10, e = 0.90
-        (10, 0.60)    # p = 10, e = 0.60
-    ]
-    
-    #run BPP
-    for p, e in aco_configs:
-        print(f"\nRunning ACO with p={p}, e={e}: ")
-        run_multiple_trials(k, b, p, e, max_evaluations, num_trials, weight_function)
-
-    #record end time and calculate time taken to run whole program 
-    end_time = time.time()
-    elapsed_time = end_time - start_time
-    print(f"Total time taken for all ACO configurations and trials: {elapsed_time:.2f} seconds")
-
-def plot_generation_fitness(generations_data, aco_label, bpp_label):
-    """
-    Plots the evolution of the best fitness over generations for one trial
-    Parameters:
-        generations_data (list): a list of dictionaries, where each dictionary contains data for a generation
-    Returns:
-        None
-    """
-    #extracting the fitnesses values from fenerations data
-    generations = list(range(1, len(generations_data) + 1))
-    best_fitnesses = [gen_data['best_fitness'] for gen_data in generations_data]
-    
-    #plot over the generations
-    plt.figure(figsize=(12, 8))
-    plt.plot(generations, best_fitnesses, label='Best Fitness', color="green", marker='o')
-
-    #plot line of best fit
-    z = np.polyfit(generations, best_fitnesses, 1)
-    p = np.poly1d(z)
-    plt.plot(generations, p(generations), label='Line of Best Fit', color='orange', linestyle='--', linewidth= 3)
-
-    plt.xlim([0,len(generations)])
-    plt.xlabel("Generations")
-    plt.ylabel("Fitness")
-    plt.title(f"Best Fitness Evolution Over Generations in one trial of {aco_label} in {bpp_label}")
-    plt.legend(loc="best")
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
-
-def plot_single_aco_type(k, b, p, e, max_evaluations, num_trials, weight_function):
-    """
-    Runs an ACO configuration with 5 trials and plots the best and worst fitnesses
-    Parameters:
-        k (int): the number of items
-        b (int): the number of bins
-        p (int): the number of bins
-        e (float): the evaportation rate
-        max_evaluations (int): the maximum number of fitness evaluations
+        max_evaluations (int): the maxiumum number of fitness evaluations 
         num_trials (int): the number of trials to run
-        weight_function (function): function to calcualte item weights
+        config_label (str): label describing the ACO configurations
     Returns:
-        None
+        list: a list of results for each trial
     """
-    best_fitness_values = []
-    worst_fitness_values = []
-
+    trial_results = []
+    start_time = time.time()
+    
     for trial in range(num_trials):
-        trial_seed = random.randint(0, 1000)
-        
-        #runs the ACO algorithm for this configuration and trial
-        best_path, best_fitness, worst_fitness, generations_data = aco_bin_packing(k, b, p, e, max_evaluations, weight_function)
-        
-        # Track best, worst, and average fitness for this trial
-        best_fitness_values.append(best_fitness)
-        worst_fitness_values.append(worst_fitness)
-    
-    # Plot the results for the 5 trials
-    trials = list(range(1, num_trials + 1))
-    bar_width = 0.4 
+        trial_seed = trial+1 #so trials across ACO types can have the same seed
+        random.seed(trial_seed)
 
-    #setting positons for the bars
-    r1 = [x - bar_width for x in trials] #positions for best fit
-    r2 = trials #positions for worst fit
+        print(f"Starting trial {trial +1} with seed {trial_seed}")
+        trial_start_time = time.time()
 
-    plt.figure(figsize=(10, 6))
-    
-    #plotting bars
-    bars_best = plt.bar(r1, best_fitness_values, label="Best Fitness", color="green", width=bar_width)
-    #bars_worst = plt.bar(r2, worst_fitness_values, label="Worst Fitness", color="red", width=bar_width)
-    
-    #displaying values on top of each bar
-    for bar in bars_best:
-        yval = bar.get_height()
-        plt.text(bar.get_x() + bar.get_width() / 2, yval, round(yval, 2), ha='center', va='bottom')
+        trial_data = aco_bin_packing(item_list, b, p, e, max_evaluations)
 
-    #for bar in bars_worst:
-    #    yval = bar.get_height()
-    #    plt.text(bar.get_x() + bar.get_width() / 2, yval, round(yval, 2), ha='center', va='bottom')
+        trial_end_time = time.time()
+        trial_duration = trial_end_time - trial_start_time
+        print(f"trial {trial+1} completed in {trial_duration:.2f} seconds")
 
-    plt.xlabel("Trials")
-    plt.ylabel("Fitness")
-    plt.title(f"Fitness Across Trials for p={p}, e={e}")
-    plt.xticks(trials)
-    plt.legend(loc="best")
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
-    
+        trial_results.append({
+            'trial': trial + 1,
+            'best_fitness': trial_data['best_overall_fitness'],
+            'worst_fitness': trial_data['worst_overall_fitness'],
+            'all_generations_data': trial_data['all_generations_data']
+        })
 
-def plot_all_aco_type(k, b, max_evaluations, num_trials, weight_function, bpp_label):
+        #output results to CSV
+        output_trial_results_to_csv(trial+1, trial_data['all_generations_data'], config_label)
+
+    total_duration = time.time() - start_time
+    print(f"All {num_trials} completed in {total_duration:.2f} seconds")
+
+
+    return trial_results 
+
+def run_all_aco_variants(item_list, b, max_evaluations, num_trials):
     """
-    Runs an ACO configuration with 5 trials and plots the best and worst fitnesses
+    Runs all the ACO with multiple trials for each for one BPP type
     Parameters:
-        k (int): the number of items
+        item_list (list): an array holding the weights of each item 
         b (int): the number of bins
-        max_evaluations (int): the maximum number of fitness evaluations
+        max_evaluations (int): the maxiumum number of fitness evaluations 
         num_trials (int): the number of trials to run
-        weight_function (function): function to calcualte item weights
-        bpp_label (str): label for BPP type
     Returns:
-        None
+        dict: a dictionary with results for all the ACO configurations
     """
     aco_configs = [
-        (100, 0.90, "p=100, e=0.90"),
-        (100, 0.60, "p=100, e=0.60"),
-        (10, 0.90, "p=10, e=0.90"),
-        (10, 0.60, "p=10, e=0.60")
+        (100, 0.90, "p=100, e=0.90"),  
+        (100, 0.60, "p=100, e=0.60"),  
+        (10, 0.90, "p=10, e=0.90"),   
+        (10, 0.60, "p=10, e=0.60")    
     ]
 
-    avg_best_fitness_per_config = {}
-    avg_worst_fitness_per_config = {}
+    all_results = {}
+    BPP_start_time = time.time()
 
-    for p, e, config_label in aco_configs:
-        best_fitness_values = []
-        worst_fitness_values = []
+    for p, e, config_lable in aco_configs:
+        print(f"\nRunning ACO with {config_lable}")
+        config_start_time = time.time()
 
-        for trial in range(num_trials):
-            trial_seed = random.randint(0, 1000)
-            
-            #runs the ACO algorithm for this configuration and trial
-            best_path, best_fitness, worst_fitness, generations_data = aco_bin_packing(k, b, p, e, max_evaluations, weight_function)
-            
-            # Track best, worst, and average fitness for this trial
-            best_fitness_values.append(best_fitness)
-            worst_fitness_values.append(worst_fitness)
-    
-        #calculate average stats across the 5 trials
-        avg_best_fitness_per_config[config_label] = sum(best_fitness_values) / num_trials
-        avg_worst_fitness_per_config[config_label] = sum(worst_fitness_values) / num_trials
+        config_results = run_multiple_trials(item_list, b, p, e, max_evaluations, num_trials, config_lable)
+        all_results[config_lable] = config_results
 
-    # Plot the results for the 5 trials
-    config_label = list(avg_best_fitness_per_config.keys())
-    avg_best_fitness = list(avg_best_fitness_per_config.values())
-    avg_worst_fitness = list(avg_worst_fitness_per_config.values())
+        config_end_time = time.time()
+        config_duration = config_end_time - config_start_time
+        print(f"ACO configuration {config_lable} completed in {config_duration}")
 
-    configs = list(range(len(config_label)))
-    bar_width = 0.4
+    BPP_end_time = time.time()
+    overall_duration = BPP_end_time - BPP_start_time
+    print(f"BPP completed in {overall_duration:.2f} seconds")
 
-    #setting positons for the bars
-    r1 = [x - bar_width/2 for x in configs] #positions for best fit
-    r2 = [x + bar_width/2 for x in configs] #positions for worst fit
+    #ouput all results to CSV
+    output_all_results_to_csv(all_results)
 
-    plt.figure(figsize=(12, 8))
-    
-    #plotting bars
-    bars_best = plt.bar(r1, avg_best_fitness, label="Average Best Fitness across trials", color="green", width=bar_width)
-    #bars_worst = plt.bar(r2, avg_worst_fitness, label="Average Worst Fitness across trials", color="red", width=bar_width)
-    
-    #display value on top of each bar
-    for bar in bars_best:
-        yval = bar.get_height()
-        plt.text(bar.get_x() + bar.get_width() / 2, yval, round(yval, 2), ha='center', va='bottom')
-    
-    #for bar in bars_worst:
-    #    yval = bar.get_height()
-    #    plt.text(bar.get_x() + bar.get_width() / 2, yval, round(yval, 2), ha='center', va='bottom')
+    return all_results
 
-    plt.xticks(configs, config_label, rotation=45,ha='right')
-    plt.xlabel("ACO Configurations")
-    plt.ylabel("Fitness")
-    plt.title(f"Fitness Across Trials ACO Configurations {bpp_label}", weight='bold')
-    plt.legend(loc="best")
-    plt.grid(True)
+def output_trial_results_to_csv(trial, all_generations_data, config_label):
+    """
+    Outputs genreational fitness data to a CSV file for each trial
+    Parameters:
+        trial (int): The trial number
+        all_generations_data (list of dicts): ach dictionary contains detailed fitness information for each generation
+        config_label (str): label describing the ACO configurations
+    Returns:
+        None
+    """
+    config_label_formatted = config_label.replace(", ", "_").replace("=", "").replace(".", "_")
+    filename = f"{config_label_formatted}_results_trial_{trial}.csv"
+    with open(filename, 'w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(['Generation', 'Best Fitness', 'Worst Fitness', 'Best Fitness So Far'])
+        for data in all_generations_data:
+            writer.writerow([
+                data['generation'], data['best_fitness'], data['worst_fitness'], data['best_fitness_so_far']])
+
+def output_all_results_to_csv(all_results):
+    with open('all_aco_results.csv', 'w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(['Configuration', 'Trial', 'Best Fitness', 'Worst Fitness'])
+        for config_label, results in all_results.items():
+            for result in results:
+                writer.writerow([config_label, result['trial'], result['best_fitness'], result['worst_fitness']])
+
+def plot_aco_performance():
+    """
+    Plots the performance of each ACO configuration by showing generational fitness trends
+    Parameter:
+        None
+    Returns:
+        None
+    """
+    config_labels = ["p=100, e=0.90", "p=100, e=0.60", "p=10, e=0.90", "p=10, e=0.60"]
+
+    #set up the plot with a subplot for each configuration
+    fig, axes = plt.subplots(nrows= round(len(config_labels)/2), ncols= 2)
+    axes = axes.flatten() #flatten the 2array for easy iteration
+
+    #iterate over each configuration to create a subplot
+    for ax, config_label in zip(axes, config_labels):
+        config_label_formatted = config_label.replace(", ", "_").replace("=", "").replace(".", "_")
+        for trial in range(1, 6):
+            filename = f'{config_label_formatted}_results_trial_{trial}.csv'
+            if os.path.exists(filename):
+                data = pd.read_csv(filename)
+                #plot the line graph for this trial
+                ax.plot(data['Generation'], data['Best Fitness'], label=f'Trial {trial}')
+
+        ax.set_title(f'Performance of ACO Configuration: {config_label}')
+        ax.set_xlim((0,len(data['Generation'])))
+        ax.set_xlabel('Generation')
+        ax.set_ylabel('Fitness')
+        ax.legend(loc="upper right")
+
     plt.tight_layout()
+    plt.savefig("BPP Performance")
     plt.show()
-    
 
+def plot_best_fitness():
+    config_labels = ["p=100, e=0.90", "p=100, e=0.60", "p=10, e=0.90", "p=10, e=0.60"]
+    best_fitnesses = []
+    #plotting
+    fig, ax = plt.subplots(figsize=(10, 8))
+    indices = np.arange(len(config_labels))
+    bar_width = 0.17
+    x = np.arange(len(config_labels))
+    bar_array = np.zeros((5, len(config_labels)))
+    multiplier = 0
+
+    #collecting best fitness data
+    for i in range(len(config_labels)):
+        config_fitnesses = []
+        config_label_formatted = config_labels[i].replace(", ", "_").replace("=", "").replace(".", "_")
+        
+        for trial in range(1, 6):
+            filename = f'{config_label_formatted}_results_trial_{trial}.csv'
+            if os.path.exists(filename):
+                data = pd.read_csv(filename)
+                best_fitness = (data['Best Fitness'].min())
+                bar_array[trial-1][i] = best_fitness
+
+                
+    for i in range(5):
+        rects = ax.bar(x + bar_width*multiplier -bar_width*2, bar_array[i], bar_width, label = f'Trial {i+1}')
+        ax.bar_label(rects, padding=3)
+        multiplier +=1
+
+    ax.set_xlabel('Configuration')
+    ax.set_ylabel('Best Fitness')
+    ax.set_title('Best fitness Across Configurations and Trials')
+    # ax.set_xticks(indices + bar_width * 2)
+    # ax.set_xtickslabels(config_labels)
+    ax.legend(loc="lower left")
+
+    plt.xticks(x, config_labels)
+    plt.tight_layout()
+    plt.savefig("Best_Fitness_Comparison.png")
+    plt.show()
 
 #TESTING
 
-k_bpp1 = 500  # Number of items for BPP1
-b_bpp1 = 10   # Number of bins for BPP1
-k_bpp2 = 500  # Number of items for BPP2
-b_bpp2 = 50   # Number of bins for BPP2
-max_evaluations = 10000  # Stop after 10,000 fitness evaluations
-num_trials = 5  # Run 5 trials
+bpp1_items = [i for i in range(1, 501)]
+bpp2_items = [(i**2)/2 for i in range (1, 501)]
+bpp1_b = 10 #num of bins
+bpp2_b = 50
+max_evaluations = 10000
+num_trials = 5
+log_filename = 'aco_results_log.txt'
 
-#redirecting output to a file
-with open("test_reults.txt", "w") as f, contextlib.redirect_stdout(f):
-    ###testing single trial
-    run_single_trial(k_bpp2, b_bpp2, p=10, e=0.90, max_evaluations=max_evaluations, seed=random.randint(0, 10000), weight_function=weight_pbb2)
+'''
+pheromones_graph = initisalise_pheromones_graph(item_list,b)
+paths = construct_ant_path_generation(pheromones_graph, p, item_list, b)
 
-    ##testing multiple trials
-    #run_multiple_trials(k_bpp1, b_bpp1, p=10, e=0.60, max_evaluations=max_evaluations, num_trials=num_trials, weight_function=weight_pbb1)
+for i, path in enumerate(paths, start=1):
+    fitness = calculate_fitness(path, b)
+    print(f"Ant {i} Path: {path}, fitness: {fitness}")
+best_path, best_fitness = evaluate_population_fitness(paths, b)
+print(f"Best Path: {best_path}, Fitness: {best_fitness}")
 
-    ##testing running all ACO types in one go for one BPP type
-    #print("Running ACO for BPP1: ")
-    #run_all_aco_types(k_bpp1, b_bpp1, max_evaluations, num_trials, weight_pbb1)
-    #print("Running ACO for BPP2: ")
-    #run_all_aco_types(k_bpp2, b_bpp2, max_evaluations, num_trials, weight_pbb2)
+fitnesses = [calculate_fitness(path, b) for path in paths]
+updated_pheromones_graph = pheromone_update(pheromones_graph, paths, fitnesses, e)
+pprint.pprint(updated_pheromones_graph)
+'''
 
-    ##testing plotting one ACO type
-    #plot_single_aco_type(k_bpp1, b_bpp1, p=10, e=0.60, max_evaluations=max_evaluations, num_trials=5, weight_function=weight_pbb1)
-
-    ##testing plotting all ACO types - BPP1
-    #plot_all_aco_type(k_bpp1, b_bpp1, max_evaluations, num_trials,weight_pbb1, "BPP1")
-
-    ##testing plotting all ACO types - BPP2
-    #plot_all_aco_type(k_bpp2, b_bpp2, max_evaluations, num_trials,weight_pbb2, "BPP2")
-
+run_all_aco_variants(bpp2_items, bpp1_b, max_evaluations, num_trials)
+plot_aco_performance()
+plot_best_fitness()
